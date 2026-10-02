@@ -12,6 +12,10 @@ import (
 
 	"notification-service/internal/config"
 	"notification-service/internal/database"
+	"notification-service/internal/httpapi"
+	"notification-service/internal/messaging"
+	"notification-service/internal/notification"
+	"notification-service/internal/repository"
 )
 
 func main() {
@@ -31,18 +35,57 @@ func main() {
 		panic(err)
 	}
 
+	natsConn, err := messaging.Connect(cfg.NATSURL)
+	if err != nil {
+		panic(err)
+	}
+
+	defer natsConn.Close()
+
+	fmt.Println("Connected to NATS")
+
 	fmt.Println("Connected to MongoDB")
 
 	db := mongoClient.Database(cfg.MongoDatabase)
 
-	_ = db
+	notificationRepo := repository.NewNotificationRepository(db)
 
+	if err := notificationRepo.EnsureIndexes(startupCtx); err != nil {
+		panic(err)
+	}
+
+	notificationService := notification.NewService(notificationRepo)
+
+	ticketConsumer := messaging.NewTicketConsumer(
+		notificationService,
+	)
+
+	ticketSubscription, err := ticketConsumer.Start(natsConn)
+	if err != nil {
+		panic(err)
+	}
+
+	defer ticketSubscription.Unsubscribe()
+
+	notificationHandler := httpapi.NewNotificationHandler(
+		notificationService,
+	)
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
+
+	mux.HandleFunc(
+		"GET /v1/notifications",
+		notificationHandler.List,
+	)
+
+	mux.HandleFunc(
+		"POST /v1/notifications/{id}/read",
+		notificationHandler.MarkAsRead,
+	)
 
 	server := &http.Server{
 		Addr:    ":" + cfg.HTTPPort,

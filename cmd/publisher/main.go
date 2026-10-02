@@ -1,0 +1,58 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/nats-io/nats.go"
+)
+
+func main() {
+	conn, err := nats.Connect("nats://localhost:4222")
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+
+	event := map[string]any{
+		"event_id":     "evt_test_100",
+		"workspace_id": "workspace_1",
+
+		"actor": map[string]any{
+			"id":   "user_10",
+			"name": "Ali",
+		},
+
+		"recipient": map[string]any{
+			"id": "user_42",
+		},
+
+		"ticket": map[string]any{
+			"id":    "ticket_392",
+			"title": "Connection problem",
+		},
+
+		"reply_id": "reply_887",
+
+		"occurred_at": time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := conn.Publish(
+		"ticket.user_mentioned",
+		data,
+	); err != nil {
+		panic(err)
+	}
+
+	if err := conn.Flush(); err != nil {
+		panic(err)
+	}
+
+	fmt.Println("event published")
+}

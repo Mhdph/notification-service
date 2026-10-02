@@ -6,6 +6,7 @@ type Config struct {
 	HTTPPort      string
 	MongoURI      string
 	MongoDatabase string
+	NATSURL       string
 }
 
 func Load() Config {
@@ -13,7 +14,9 @@ func Load() Config {
 	return Config{
 		HTTPPort:      getEnv("HTTP_PORT", "8080"),
 		MongoURI:      getEnv("MONGO_URI", "mongodb://localhost:27017"),
-		MongoDatabase: getEnv("MONGO_DATABASE", "notifications"),
+		MongoDatabase: getEnv("MONGO_DATABASE", "Notification"),
+
+		NATSURL: getEnv("NATS_URL", "nats://localhost:4222"),
 	}
 }
 
