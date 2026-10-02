@@ -15,17 +15,30 @@ import (
 	"notification-service/internal/httpapi"
 	"notification-service/internal/messaging"
 	"notification-service/internal/notification"
+	"notification-service/internal/realtime"
 	"notification-service/internal/repository"
 )
 
 func main() {
+	// --------------------------------------------------
+	// Config
+	// --------------------------------------------------
+
 	cfg := config.Load()
+
+	// --------------------------------------------------
+	// Startup context
+	// --------------------------------------------------
 
 	startupCtx, startupCancel := context.WithTimeout(
 		context.Background(),
 		10*time.Second,
 	)
 	defer startupCancel()
+
+	// --------------------------------------------------
+	// MongoDB
+	// --------------------------------------------------
 
 	mongoClient, err := database.ConnectMongo(
 		startupCtx,
@@ -35,13 +48,38 @@ func main() {
 		panic(err)
 	}
 
+	fmt.Println("Connected to MongoDB")
+
+	db := mongoClient.Database(cfg.MongoDatabase)
+
+	// --------------------------------------------------
+	// Repository
+	// --------------------------------------------------
+
+	notificationRepo := repository.NewNotificationRepository(db)
+
+	if err := notificationRepo.EnsureIndexes(startupCtx); err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Notification indexes ready")
+
+	// --------------------------------------------------
+	// NATS
+	// --------------------------------------------------
+
 	natsConn, err := messaging.Connect(cfg.NATSURL)
 	if err != nil {
 		panic(err)
 	}
+
 	defer natsConn.Close()
 
 	fmt.Println("Connected to NATS")
+
+	// --------------------------------------------------
+	// JetStream
+	// --------------------------------------------------
 
 	js, err := messaging.JetStream(natsConn)
 	if err != nil {
@@ -54,17 +92,24 @@ func main() {
 
 	fmt.Println("JetStream ready")
 
-	fmt.Println("Connected to MongoDB")
+	// --------------------------------------------------
+	// Realtime Hub
+	// --------------------------------------------------
 
-	db := mongoClient.Database(cfg.MongoDatabase)
+	hub := realtime.NewHub()
 
-	notificationRepo := repository.NewNotificationRepository(db)
+	// --------------------------------------------------
+	// Notification Service
+	// --------------------------------------------------
 
-	if err := notificationRepo.EnsureIndexes(startupCtx); err != nil {
-		panic(err)
-	}
+	notificationService := notification.NewService(
+		notificationRepo,
+		hub,
+	)
 
-	notificationService := notification.NewService(notificationRepo)
+	// --------------------------------------------------
+	// NATS Consumers
+	// --------------------------------------------------
 
 	ticketConsumer := messaging.NewTicketConsumer(
 		notificationService,
@@ -77,15 +122,34 @@ func main() {
 
 	defer ticketSubscription.Unsubscribe()
 
+	fmt.Println("Ticket consumer started")
+
+	// --------------------------------------------------
+	// HTTP Handlers
+	// --------------------------------------------------
+
 	notificationHandler := httpapi.NewNotificationHandler(
 		notificationService,
 	)
+
+	realtimeHandler := realtime.NewHandler(
+		hub,
+	)
+
+	// --------------------------------------------------
+	// HTTP Router
+	// --------------------------------------------------
+
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	})
+	mux.HandleFunc(
+		"GET /health",
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+
+			_, _ = w.Write([]byte("OK"))
+		},
+	)
 
 	mux.HandleFunc(
 		"GET /v1/notifications",
@@ -97,19 +161,35 @@ func main() {
 		notificationHandler.MarkAsRead,
 	)
 
+	mux.HandleFunc(
+		"GET /ws",
+		realtimeHandler.ServeWS,
+	)
+
+	// --------------------------------------------------
+	// HTTP Server
+	// --------------------------------------------------
+
 	server := &http.Server{
 		Addr:    ":" + cfg.HTTPPort,
 		Handler: mux,
 	}
 
 	go func() {
-		fmt.Printf("Notification Service listening on %s\n", server.Addr)
+		fmt.Printf(
+			"Notification Service listening on %s\n",
+			server.Addr,
+		)
 
 		if err := server.ListenAndServe(); err != nil &&
 			!errors.Is(err, http.ErrServerClosed) {
 			panic(err)
 		}
 	}()
+
+	// --------------------------------------------------
+	// Graceful Shutdown
+	// --------------------------------------------------
 
 	shutdownSignal := make(chan os.Signal, 1)
 
@@ -129,12 +209,36 @@ func main() {
 	)
 	defer shutdownCancel()
 
+	// Stop accepting new HTTP requests
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		panic(err)
+		fmt.Printf(
+			"HTTP server shutdown error: %v\n",
+			err,
+		)
 	}
 
+	// Stop NATS consumer
+	if err := ticketSubscription.Unsubscribe(); err != nil {
+		fmt.Printf(
+			"NATS subscription shutdown error: %v\n",
+			err,
+		)
+	}
+
+	// Close NATS connection
+	if err := natsConn.Drain(); err != nil {
+		fmt.Printf(
+			"NATS drain error: %v\n",
+			err,
+		)
+	}
+
+	// Close MongoDB connection
 	if err := mongoClient.Disconnect(shutdownCtx); err != nil {
-		panic(err)
+		fmt.Printf(
+			"MongoDB shutdown error: %v\n",
+			err,
+		)
 	}
 
 	fmt.Println("Notification Service stopped")

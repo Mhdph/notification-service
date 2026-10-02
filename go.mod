@@ -3,6 +3,7 @@ module notification-service
 go 1.27.1
 
 require (
+	github.com/gorilla/websocket v1.5.3
 	github.com/nats-io/nats.go v1.54.0
 	go.mongodb.org/mongo-driver/v2 v2.9.1
 )

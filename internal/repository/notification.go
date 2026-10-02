@@ -27,21 +27,24 @@ func NewNotificationRepository(
 func (r *NotificationRepository) Create(
 	ctx context.Context,
 	n notification.Notification,
-) error {
-	_, err := r.collection.InsertOne(ctx, n)
+) (notification.Notification, error) {
+	result, err := r.collection.InsertOne(ctx, n)
 
 	if mongo.IsDuplicateKeyError(err) {
-		return nil
+		return n, nil
 	}
 
 	if err != nil {
-		return fmt.Errorf(
-			"insert notification: %w",
-			err,
-		)
+		return notification.Notification{},
+			fmt.Errorf("insert notification: %w", err)
 	}
 
-	return nil
+	id, ok := result.InsertedID.(bson.ObjectID)
+	if ok {
+		n.ID = id
+	}
+
+	return n, nil
 }
 
 func (r *NotificationRepository) EnsureIndexes(

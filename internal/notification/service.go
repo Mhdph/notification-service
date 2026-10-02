@@ -25,14 +25,18 @@ type CreateInput struct {
 
 type Service struct {
 	repository Repository
+	notifier   Notifier
 }
 
-func NewService(repository Repository) *Service {
+func NewService(
+	repository Repository,
+	notifier Notifier,
+) *Service {
 	return &Service{
 		repository: repository,
+		notifier:   notifier,
 	}
 }
-
 func (s *Service) Create(
 	ctx context.Context,
 	input CreateInput,
@@ -59,7 +63,16 @@ func (s *Service) Create(
 		CreatedAt: time.Now().UTC(),
 	}
 
-	return s.repository.Create(ctx, n)
+	created, err := s.repository.Create(ctx, n)
+	if err != nil {
+		return err
+	}
+
+	if err := s.notifier.Notify(ctx, created); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Service) List(

@@ -6,7 +6,7 @@ type Repository interface {
 	Create(
 		ctx context.Context,
 		notification Notification,
-	) error
+	) (Notification, error)
 
 	ListByRecipient(
 		ctx context.Context,
