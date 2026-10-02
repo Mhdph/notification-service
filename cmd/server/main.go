@@ -39,10 +39,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
 	defer natsConn.Close()
 
 	fmt.Println("Connected to NATS")
+
+	js, err := messaging.JetStream(natsConn)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := messaging.EnsureTicketStream(js); err != nil {
+		panic(err)
+	}
+
+	fmt.Println("JetStream ready")
 
 	fmt.Println("Connected to MongoDB")
 
@@ -60,7 +70,7 @@ func main() {
 		notificationService,
 	)
 
-	ticketSubscription, err := ticketConsumer.Start(natsConn)
+	ticketSubscription, err := ticketConsumer.Start(js)
 	if err != nil {
 		panic(err)
 	}

@@ -28,12 +28,18 @@ func (r *NotificationRepository) Create(
 	ctx context.Context,
 	n notification.Notification,
 ) error {
-	result, err := r.collection.InsertOne(ctx, n)
-	if err != nil {
-		return fmt.Errorf("insert notification: %w", err)
+	_, err := r.collection.InsertOne(ctx, n)
+
+	if mongo.IsDuplicateKeyError(err) {
+		return nil
 	}
 
-	fmt.Printf("Created notification: %v\n", result.InsertedID)
+	if err != nil {
+		return fmt.Errorf(
+			"insert notification: %w",
+			err,
+		)
+	}
 
 	return nil
 }

@@ -16,7 +16,7 @@ func main() {
 	defer conn.Close()
 
 	event := map[string]any{
-		"event_id":     "evt_test_100",
+		"event_id":     "evt_test_101",
 		"workspace_id": "workspace_1",
 
 		"actor": map[string]any{
@@ -43,12 +43,24 @@ func main() {
 		panic(err)
 	}
 
-	if err := conn.Publish(
-		"ticket.user_mentioned",
-		data,
-	); err != nil {
+	js, err := conn.JetStream()
+	if err != nil {
 		panic(err)
 	}
+
+	ack, err := js.Publish(
+		"ticket.user_mentioned",
+		data,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf(
+		"event stored in stream %s sequence %d\n",
+		ack.Stream,
+		ack.Sequence,
+	)
 
 	if err := conn.Flush(); err != nil {
 		panic(err)

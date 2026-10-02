@@ -23,14 +23,21 @@ func NewTicketConsumer(
 }
 
 func (c *TicketConsumer) Start(
-	conn *nats.Conn,
+	js nats.JetStreamContext,
 ) (*nats.Subscription, error) {
-	sub, err := conn.Subscribe(
+	sub, err := js.Subscribe(
 		"ticket.user_mentioned",
-		func(msg *nats.Msg) {
-			c.handleUserMentioned(msg)
-		},
+		c.handleUserMentioned,
+
+		nats.Durable("notification-service-ticket-mentions"),
+
+		nats.ManualAck(),
+
+		nats.AckExplicit(),
+
+		nats.DeliverNew(),
 	)
+
 	if err != nil {
 		return nil, fmt.Errorf(
 			"subscribe to ticket.user_mentioned: %w",
@@ -40,7 +47,6 @@ func (c *TicketConsumer) Start(
 
 	return sub, nil
 }
-
 func (c *TicketConsumer) handleUserMentioned(
 	msg *nats.Msg,
 ) {
@@ -51,6 +57,11 @@ func (c *TicketConsumer) handleUserMentioned(
 			"invalid ticket.user_mentioned event: %v\n",
 			err,
 		)
+
+		if err := msg.Term(); err != nil {
+			fmt.Printf("terminate message: %v\n", err)
+		}
+
 		return
 	}
 
@@ -98,11 +109,21 @@ func (c *TicketConsumer) handleUserMentioned(
 			"create notification from ticket mention: %v\n",
 			err,
 		)
+
+		if err := msg.Nak(); err != nil {
+			fmt.Printf("nak message: %v\n", err)
+		}
+
+		return
+	}
+
+	if err := msg.Ack(); err != nil {
+		fmt.Printf("ack message: %v\n", err)
 		return
 	}
 
 	fmt.Printf(
-		"notification created from event %s\n",
+		"notification processed from event %s\n",
 		event.EventID,
 	)
 }
