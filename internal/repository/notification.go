@@ -13,6 +13,7 @@ import (
 )
 
 type NotificationRepository struct {
+	database   *mongo.Database
 	collection *mongo.Collection
 }
 
@@ -20,33 +21,81 @@ func NewNotificationRepository(
 	db *mongo.Database,
 ) *NotificationRepository {
 	return &NotificationRepository{
+		database:   db,
 		collection: db.Collection("notifications"),
 	}
 }
 
-func (r *NotificationRepository) Create(
+func (r *NotificationRepository) CreateWithOutbox(
 	ctx context.Context,
 	n notification.Notification,
+	outbox notification.OutboxEvent,
 ) (notification.Notification, error) {
-	result, err := r.collection.InsertOne(ctx, n)
-
-	if mongo.IsDuplicateKeyError(err) {
-		return n, nil
+	session, err := r.database.Client().StartSession()
+	if err != nil {
+		return notification.Notification{},
+			fmt.Errorf("start mongo session: %w", err)
 	}
+
+	defer session.EndSession(ctx)
+
+	_, err = session.WithTransaction(
+		ctx,
+		func(
+			txCtx context.Context,
+		) (any, error) {
+			result, err := r.collection.InsertOne(
+				txCtx,
+				n,
+			)
+
+			if err != nil {
+				return nil, fmt.Errorf(
+					"insert notification: %w",
+					err,
+				)
+			}
+
+			id, ok := result.InsertedID.(bson.ObjectID)
+			if !ok {
+				return nil, fmt.Errorf(
+					"unexpected notification id type",
+				)
+			}
+
+			n.ID = id
+
+			outboxCollection :=
+				r.database.Collection(
+					"notification_outbox",
+				)
+
+			_, err = outboxCollection.InsertOne(
+				txCtx,
+				outbox,
+			)
+
+			if err != nil {
+				return nil, fmt.Errorf(
+					"insert outbox event: %w",
+					err,
+				)
+			}
+
+			return nil, nil
+		},
+	)
 
 	if err != nil {
 		return notification.Notification{},
-			fmt.Errorf("insert notification: %w", err)
-	}
-
-	id, ok := result.InsertedID.(bson.ObjectID)
-	if ok {
-		n.ID = id
+			fmt.Errorf(
+				"create notification transaction: %w",
+				err,
+			)
 	}
 
 	return n, nil
 }
-
 func (r *NotificationRepository) EnsureIndexes(
 	ctx context.Context,
 ) error {

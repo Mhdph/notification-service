@@ -3,9 +3,10 @@ package notification
 import "context"
 
 type Repository interface {
-	Create(
+	CreateWithOutbox(
 		ctx context.Context,
 		notification Notification,
+		outbox OutboxEvent,
 	) (Notification, error)
 
 	ListByRecipient(

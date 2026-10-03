@@ -2,7 +2,11 @@ package notification
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 type CreateInput struct {
@@ -25,23 +29,24 @@ type CreateInput struct {
 
 type Service struct {
 	repository Repository
-	notifier   Notifier
 }
 
 func NewService(
 	repository Repository,
-	notifier Notifier,
 ) *Service {
 	return &Service{
 		repository: repository,
-		notifier:   notifier,
 	}
 }
 func (s *Service) Create(
 	ctx context.Context,
 	input CreateInput,
 ) error {
+	now := time.Now().UTC()
+
 	n := Notification{
+		ID: bson.NewObjectID(),
+
 		WorkspaceID: input.WorkspaceID,
 		RecipientID: input.RecipientID,
 
@@ -60,19 +65,60 @@ func (s *Service) Create(
 
 		ReadAt: nil,
 
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: now,
 	}
 
-	created, err := s.repository.Create(ctx, n)
+	createdEvent := CreatedEvent{
+		ID: n.ID.Hex(),
+
+		WorkspaceID: n.WorkspaceID,
+		RecipientID: n.RecipientID,
+
+		Type: n.Type,
+
+		Actor: n.Actor,
+
+		Resource: n.Resource,
+
+		Title: n.Title,
+		Body:  n.Body,
+
+		Action: n.Action,
+
+		ReadAt: n.ReadAt,
+
+		CreatedAt: n.CreatedAt,
+	}
+
+	payload, err := json.Marshal(createdEvent)
 	if err != nil {
-		return err
+		return fmt.Errorf(
+			"marshal notification created event: %w",
+			err,
+		)
 	}
 
-	if err := s.notifier.Notify(ctx, created); err != nil {
-		return err
+	outbox := OutboxEvent{
+		ID: bson.NewObjectID(),
+
+		EventID: bson.NewObjectID().Hex(),
+
+		Subject: "notification.created",
+
+		Payload: payload,
+
+		CreatedAt: now,
+
+		PublishedAt: nil,
 	}
 
-	return nil
+	_, err = s.repository.CreateWithOutbox(
+		ctx,
+		n,
+		outbox,
+	)
+
+	return err
 }
 
 func (s *Service) List(

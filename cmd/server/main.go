@@ -104,7 +104,6 @@ func main() {
 
 	notificationService := notification.NewService(
 		notificationRepo,
-		hub,
 	)
 
 	// --------------------------------------------------
