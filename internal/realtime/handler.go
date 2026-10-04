@@ -2,6 +2,7 @@ package realtime
 
 import (
 	"net/http"
+
 	"notification-service/internal/identity"
 
 	"github.com/gorilla/websocket"
@@ -11,14 +12,21 @@ type Handler struct {
 	hub *Hub
 }
 
-func NewHandler(hub *Hub) *Handler {
+func NewHandler(
+	hub *Hub,
+) *Handler {
 	return &Handler{
 		hub: hub,
 	}
 }
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+
+	CheckOrigin: func(
+		r *http.Request,
+	) bool {
 		return true
 	},
 }
@@ -59,17 +67,15 @@ func (h *Handler) ServeWS(
 			conn,
 		)
 
-	h.hub.Register(client)
+	h.hub.Register(
+		client,
+	)
 
-	defer func() {
-		h.hub.Unregister(client)
-		_ = client.Close()
-	}()
+	go client.WritePump(
+		h.hub,
+	)
 
-	for {
-		if _, _, err :=
-			conn.ReadMessage(); err != nil {
-			break
-		}
-	}
+	client.ReadPump(
+		h.hub,
+	)
 }

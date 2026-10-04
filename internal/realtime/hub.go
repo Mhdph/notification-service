@@ -1,8 +1,7 @@
 package realtime
 
 import (
-	"context"
-	"notification-service/internal/notification"
+	"fmt"
 	"sync"
 )
 
@@ -14,85 +13,115 @@ type Hub struct {
 
 func NewHub() *Hub {
 	return &Hub{
-		clients: make(map[string]map[*Client]struct{}),
+		clients: make(
+			map[string]map[*Client]struct{},
+		),
 	}
 }
 
-func (h *Hub) Register(client *Client) {
+func clientKey(
+	appID string,
+	userID string,
+) string {
+	return fmt.Sprintf(
+		"%s:%s",
+		appID,
+		userID,
+	)
+}
+
+func (h *Hub) Register(
+	client *Client,
+) {
+	key := clientKey(
+		client.AppID,
+		client.UserID,
+	)
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if _, exists := h.clients[client.UserID]; !exists {
-		h.clients[client.UserID] = make(map[*Client]struct{})
+	if h.clients[key] == nil {
+		h.clients[key] =
+			make(
+				map[*Client]struct{},
+			)
 	}
 
-	h.clients[client.UserID][client] = struct{}{}
+	h.clients[key][client] =
+		struct{}{}
 }
-func (h *Hub) Unregister(client *Client) {
+
+func (h *Hub) Unregister(
+	client *Client,
+) {
+	key := clientKey(
+		client.AppID,
+		client.UserID,
+	)
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	userClients, exists := h.clients[client.UserID]
-	if !exists {
+	userClients, ok :=
+		h.clients[key]
+
+	if !ok {
 		return
 	}
 
-	delete(userClients, client)
+	delete(
+		userClients,
+		client,
+	)
 
 	if len(userClients) == 0 {
-		delete(h.clients, client.UserID)
+		delete(
+			h.clients,
+			key,
+		)
 	}
 }
+
 func (h *Hub) SendToUser(
+	appID string,
 	userID string,
 	data any,
 ) {
+	key := clientKey(
+		appID,
+		userID,
+	)
+
 	h.mu.RLock()
 
-	userClients := make([]*Client, 0)
+	clientsMap :=
+		h.clients[key]
 
-	for client := range h.clients[userID] {
-		userClients = append(userClients, client)
+	clients := make(
+		[]*Client,
+		0,
+		len(clientsMap),
+	)
+
+	for client := range clientsMap {
+
+		clients = append(
+			clients,
+			client,
+		)
 	}
 
 	h.mu.RUnlock()
 
-	for _, client := range userClients {
-		if err := client.WriteJSON(data); err != nil {
-			h.Unregister(client)
-			_ = client.Close()
+	for _, client := range clients {
+
+		if client.Enqueue(data) {
+			continue
 		}
+
+		h.Unregister(client)
+
+		_ = client.Close()
 	}
-}
-func (h *Hub) Notify(
-	ctx context.Context,
-	n notification.Notification,
-) error {
-	event := map[string]any{
-		"type": "notification.created",
-
-		"data": map[string]any{
-			"id": n.ID.Hex(),
-
-			"type": n.Type,
-
-			"title": n.Title,
-			"body":  n.Body,
-
-			"actor": n.Actor,
-
-			"resource": n.Resource,
-
-			"action": n.Action,
-
-			"created_at": n.CreatedAt,
-		},
-	}
-
-	h.SendToUser(
-		n.RecipientID,
-		event,
-	)
-
-	return nil
 }

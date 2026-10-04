@@ -25,12 +25,17 @@ func NewRealtimeConsumer(
 func (c *RealtimeConsumer) Start(
 	conn *nats.Conn,
 ) (*nats.Subscription, error) {
-	sub, err := conn.Subscribe(
-		"notification.created",
-		func(msg *nats.Msg) {
-			c.handleNotificationCreated(msg)
-		},
-	)
+	sub, err :=
+		conn.Subscribe(
+			"notification.created",
+			func(
+				msg *nats.Msg,
+			) {
+				c.handleNotificationCreated(
+					msg,
+				)
+			},
+		)
 
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -47,18 +52,22 @@ func (c *RealtimeConsumer) handleNotificationCreated(
 ) {
 	var event notification.CreatedEvent
 
-	if err := json.Unmarshal(
-		msg.Data,
-		&event,
-	); err != nil {
+	if err :=
+		json.Unmarshal(
+			msg.Data,
+			&event,
+		); err != nil {
+
 		fmt.Printf(
 			"invalid notification.created event: %v\n",
 			err,
 		)
+
 		return
 	}
 
 	c.hub.SendToUser(
+		event.AppID,
 		event.RecipientID,
 		map[string]any{
 			"type": "notification.created",
