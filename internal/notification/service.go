@@ -156,3 +156,26 @@ func (s *Service) MarkAsRead(
 		notificationID,
 	)
 }
+func (s *Service) UnreadCount(
+	ctx context.Context,
+	workspaceID string,
+	recipientID string,
+) (int64, error) {
+	return s.repository.UnreadCount(
+		ctx,
+		workspaceID,
+		recipientID,
+	)
+}
+
+func (s *Service) MarkAllAsRead(
+	ctx context.Context,
+	workspaceID string,
+	recipientID string,
+) error {
+	return s.repository.MarkAllAsRead(
+		ctx,
+		workspaceID,
+		recipientID,
+	)
+}

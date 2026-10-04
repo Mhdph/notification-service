@@ -22,4 +22,16 @@ type Repository interface {
 		recipientID string,
 		notificationID string,
 	) error
+
+	UnreadCount(
+		ctx context.Context,
+		workspaceID string,
+		recipientID string,
+	) (int64, error)
+
+	MarkAllAsRead(
+		ctx context.Context,
+		workspaceID string,
+		recipientID string,
+	) error
 }

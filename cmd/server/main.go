@@ -22,39 +22,39 @@ import (
 )
 
 func main() {
-	// --------------------------------------------------
-	// Config
-	// --------------------------------------------------
-
 	cfg := config.Load()
 
 	// --------------------------------------------------
 	// Application Context
 	// --------------------------------------------------
 
-	appCtx, appCancel := context.WithCancel(
-		context.Background(),
-	)
+	appCtx, appCancel :=
+		context.WithCancel(
+			context.Background(),
+		)
 	defer appCancel()
 
 	// --------------------------------------------------
 	// Startup Context
 	// --------------------------------------------------
 
-	startupCtx, startupCancel := context.WithTimeout(
-		context.Background(),
-		10*time.Second,
-	)
+	startupCtx, startupCancel :=
+		context.WithTimeout(
+			context.Background(),
+			10*time.Second,
+		)
 	defer startupCancel()
 
 	// --------------------------------------------------
 	// MongoDB
 	// --------------------------------------------------
 
-	mongoClient, err := database.ConnectMongo(
-		startupCtx,
-		cfg.MongoURI,
-	)
+	mongoClient, err :=
+		database.ConnectMongo(
+			startupCtx,
+			cfg.MongoURI,
+		)
+
 	if err != nil {
 		panic(err)
 	}
@@ -70,10 +70,14 @@ func main() {
 	// --------------------------------------------------
 
 	notificationRepo :=
-		repository.NewNotificationRepository(db)
+		repository.NewNotificationRepository(
+			db,
+		)
 
 	outboxRepo :=
-		repository.NewOutboxRepository(db)
+		repository.NewOutboxRepository(
+			db,
+		)
 
 	// --------------------------------------------------
 	// MongoDB Indexes
@@ -97,9 +101,11 @@ func main() {
 	// NATS
 	// --------------------------------------------------
 
-	natsConn, err := messaging.Connect(
-		cfg.NATSURL,
-	)
+	natsConn, err :=
+		messaging.Connect(
+			cfg.NATSURL,
+		)
+
 	if err != nil {
 		panic(err)
 	}
@@ -110,9 +116,11 @@ func main() {
 	// JetStream
 	// --------------------------------------------------
 
-	js, err := messaging.JetStream(
-		natsConn,
-	)
+	js, err :=
+		messaging.JetStream(
+			natsConn,
+		)
+
 	if err != nil {
 		panic(err)
 	}
@@ -185,7 +193,9 @@ func main() {
 		)
 
 	ticketSubscription, err :=
-		ticketConsumer.Start(js)
+		ticketConsumer.Start(
+			js,
+		)
 
 	if err != nil {
 		panic(err)
@@ -259,8 +269,18 @@ func main() {
 	)
 
 	mux.HandleFunc(
+		"GET /v1/notifications/unread-count",
+		notificationHandler.UnreadCount,
+	)
+
+	mux.HandleFunc(
 		"POST /v1/notifications/{id}/read",
 		notificationHandler.MarkAsRead,
+	)
+
+	mux.HandleFunc(
+		"POST /v1/notifications/read-all",
+		notificationHandler.MarkAllAsRead,
 	)
 
 	mux.HandleFunc(

@@ -109,16 +109,31 @@ func (r *NotificationRepository) EnsureIndexes(
 		},
 		{
 			Keys: bson.D{
+				{Key: "workspace_id", Value: 1},
+				{Key: "recipient_id", Value: 1},
+				{Key: "read_at", Value: 1},
+			},
+		},
+		{
+			Keys: bson.D{
 				{Key: "source_event_id", Value: 1},
 				{Key: "recipient_id", Value: 1},
 			},
-			Options: options.Index().SetUnique(true),
+			Options: options.Index().
+				SetUnique(true),
 		},
 	}
 
-	_, err := r.collection.Indexes().CreateMany(ctx, indexes)
+	_, err := r.collection.Indexes().CreateMany(
+		ctx,
+		indexes,
+	)
+
 	if err != nil {
-		return fmt.Errorf("create notification indexes: %w", err)
+		return fmt.Errorf(
+			"create notification indexes: %w",
+			err,
+		)
 	}
 
 	return nil
@@ -186,6 +201,67 @@ func (r *NotificationRepository) MarkAsRead(
 
 	if result.MatchedCount == 0 {
 		return notification.ErrNotFound
+	}
+
+	return nil
+}
+
+func (r *NotificationRepository) UnreadCount(
+	ctx context.Context,
+	workspaceID string,
+	recipientID string,
+) (int64, error) {
+	filter := bson.M{
+		"workspace_id": workspaceID,
+		"recipient_id": recipientID,
+		"read_at":      nil,
+	}
+
+	count, err := r.collection.CountDocuments(
+		ctx,
+		filter,
+	)
+
+	if err != nil {
+		return 0, fmt.Errorf(
+			"count unread notifications: %w",
+			err,
+		)
+	}
+
+	return count, nil
+}
+
+func (r *NotificationRepository) MarkAllAsRead(
+	ctx context.Context,
+	workspaceID string,
+	recipientID string,
+) error {
+	now := time.Now().UTC()
+
+	filter := bson.M{
+		"workspace_id": workspaceID,
+		"recipient_id": recipientID,
+		"read_at":      nil,
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"read_at": now,
+		},
+	}
+
+	_, err := r.collection.UpdateMany(
+		ctx,
+		filter,
+		update,
+	)
+
+	if err != nil {
+		return fmt.Errorf(
+			"mark all notifications as read: %w",
+			err,
+		)
 	}
 
 	return nil
