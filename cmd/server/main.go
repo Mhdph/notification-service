@@ -17,6 +17,8 @@ import (
 	"notification-service/internal/notification"
 	"notification-service/internal/realtime"
 	"notification-service/internal/repository"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func main() {
@@ -139,7 +141,7 @@ func main() {
 		)
 
 	// --------------------------------------------------
-	// Realtime Event Publisher
+	// Event Publisher
 	// --------------------------------------------------
 
 	eventPublisher :=
@@ -151,15 +153,27 @@ func main() {
 	// Outbox Worker
 	// --------------------------------------------------
 
+	workerID :=
+		bson.NewObjectID().Hex()
+
 	outboxWorker :=
 		notification.NewOutboxWorker(
 			outboxRepo,
 			eventPublisher,
+			workerID,
 			1*time.Second,
+			30*time.Second,
 			100,
 		)
 
-	go outboxWorker.Run(appCtx)
+	fmt.Printf(
+		"Outbox worker ID: %s\n",
+		workerID,
+	)
+
+	go outboxWorker.Run(
+		appCtx,
+	)
 
 	// --------------------------------------------------
 	// Ticket Consumer
@@ -177,7 +191,9 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println("Ticket consumer started")
+	fmt.Println(
+		"Ticket consumer started",
+	)
 
 	// --------------------------------------------------
 	// Realtime Consumer
@@ -197,7 +213,9 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println("Realtime consumer started")
+	fmt.Println(
+		"Realtime consumer started",
+	)
 
 	// --------------------------------------------------
 	// HTTP Handlers

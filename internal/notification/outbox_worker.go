@@ -10,21 +10,30 @@ type OutboxWorker struct {
 	repository OutboxRepository
 	publisher  EventPublisher
 
-	interval  time.Duration
-	batchSize int64
+	workerID string
+
+	interval      time.Duration
+	leaseDuration time.Duration
+	batchSize     int
 }
 
 func NewOutboxWorker(
 	repository OutboxRepository,
 	publisher EventPublisher,
+	workerID string,
 	interval time.Duration,
-	batchSize int64,
+	leaseDuration time.Duration,
+	batchSize int,
 ) *OutboxWorker {
 	return &OutboxWorker{
 		repository: repository,
 		publisher:  publisher,
-		interval:   interval,
-		batchSize:  batchSize,
+
+		workerID: workerID,
+
+		interval:      interval,
+		leaseDuration: leaseDuration,
+		batchSize:     batchSize,
 	}
 }
 
@@ -54,23 +63,28 @@ func (w *OutboxWorker) Run(
 func (w *OutboxWorker) processBatch(
 	ctx context.Context,
 ) {
-	events, err := w.repository.FindUnpublished(
-		ctx,
-		w.batchSize,
-	)
-
-	if err != nil {
-		fmt.Printf(
-			"outbox: find unpublished events: %v\n",
-			err,
+	for i := 0; i < w.batchSize; i++ {
+		event, err := w.repository.ClaimNext(
+			ctx,
+			w.workerID,
+			w.leaseDuration,
 		)
-		return
-	}
 
-	for _, event := range events {
+		if err != nil {
+			fmt.Printf(
+				"outbox: claim event: %v\n",
+				err,
+			)
+			return
+		}
+
+		if event == nil {
+			return
+		}
+
 		if err := w.processEvent(
 			ctx,
-			event,
+			*event,
 		); err != nil {
 			fmt.Printf(
 				"outbox: process event %s: %v\n",
@@ -99,6 +113,7 @@ func (w *OutboxWorker) processEvent(
 	if err := w.repository.MarkPublished(
 		ctx,
 		event.ID,
+		w.workerID,
 	); err != nil {
 		return fmt.Errorf(
 			"mark published: %w",

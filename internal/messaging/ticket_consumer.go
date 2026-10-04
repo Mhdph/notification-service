@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"notification-service/internal/notification"
 
@@ -25,17 +26,26 @@ func NewTicketConsumer(
 func (c *TicketConsumer) Start(
 	js nats.JetStreamContext,
 ) (*nats.Subscription, error) {
-	sub, err := js.Subscribe(
+	sub, err := js.QueueSubscribe(
 		"ticket.user_mentioned",
+		"notification-service",
 		c.handleUserMentioned,
 
-		nats.Durable("notification-service-ticket-mentions"),
+		nats.Durable(
+			"notification-service-ticket-mentions",
+		),
 
 		nats.ManualAck(),
 
 		nats.AckExplicit(),
 
-		nats.DeliverNew(),
+		nats.DeliverAll(),
+
+		nats.AckWait(
+			30*time.Second,
+		),
+
+		nats.MaxDeliver(10),
 	)
 
 	if err != nil {
@@ -47,28 +57,42 @@ func (c *TicketConsumer) Start(
 
 	return sub, nil
 }
+
 func (c *TicketConsumer) handleUserMentioned(
 	msg *nats.Msg,
 ) {
 	var event TicketUserMentionedEvent
 
-	if err := json.Unmarshal(msg.Data, &event); err != nil {
+	if err := json.Unmarshal(
+		msg.Data,
+		&event,
+	); err != nil {
 		fmt.Printf(
 			"invalid ticket.user_mentioned event: %v\n",
 			err,
 		)
 
 		if err := msg.Term(); err != nil {
-			fmt.Printf("terminate message: %v\n", err)
+			fmt.Printf(
+				"terminate message: %v\n",
+				err,
+			)
 		}
 
 		return
 	}
 
-	err := c.service.Create(
+	ctx, cancel := context.WithTimeout(
 		context.Background(),
+		10*time.Second,
+	)
+	defer cancel()
+
+	err := c.service.Create(
+		ctx,
 		notification.CreateInput{
 			WorkspaceID: event.WorkspaceID,
+
 			RecipientID: event.Recipient.ID,
 
 			Type: "ticket.mention",
@@ -93,6 +117,7 @@ func (c *TicketConsumer) handleUserMentioned(
 
 			Action: notification.Action{
 				Type: "open",
+
 				URL: fmt.Sprintf(
 					"/tickets/%s?reply=%s",
 					event.Ticket.ID,
@@ -111,19 +136,26 @@ func (c *TicketConsumer) handleUserMentioned(
 		)
 
 		if err := msg.Nak(); err != nil {
-			fmt.Printf("nak message: %v\n", err)
+			fmt.Printf(
+				"nak message: %v\n",
+				err,
+			)
 		}
 
 		return
 	}
 
 	if err := msg.Ack(); err != nil {
-		fmt.Printf("ack message: %v\n", err)
+		fmt.Printf(
+			"ack message: %v\n",
+			err,
+		)
+
 		return
 	}
 
 	fmt.Printf(
-		"notification processed from event %s\n",
+		"notification created from event %s\n",
 		event.EventID,
 	)
 }

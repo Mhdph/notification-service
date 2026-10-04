@@ -18,6 +18,9 @@ type OutboxEvent struct {
 	CreatedAt time.Time `bson:"created_at"`
 
 	PublishedAt *time.Time `bson:"published_at,omitempty"`
+	ClaimedBy   string     `bson:"claimed_by,omitempty"`
+
+	ClaimedUntil *time.Time `bson:"claimed_until,omitempty"`
 }
 
 type CreatedEvent struct {

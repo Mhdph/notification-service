@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -67,20 +68,26 @@ func (r *OutboxRepository) FindUnpublished(
 func (r *OutboxRepository) MarkPublished(
 	ctx context.Context,
 	id bson.ObjectID,
+	workerID string,
 ) error {
 	now := time.Now().UTC()
 
 	filter := bson.M{
-		"_id": id,
+		"_id":        id,
+		"claimed_by": workerID,
 	}
 
 	update := bson.M{
 		"$set": bson.M{
 			"published_at": now,
 		},
+		"$unset": bson.M{
+			"claimed_by":    "",
+			"claimed_until": "",
+		},
 	}
 
-	_, err := r.collection.UpdateOne(
+	result, err := r.collection.UpdateOne(
 		ctx,
 		filter,
 		update,
@@ -93,8 +100,16 @@ func (r *OutboxRepository) MarkPublished(
 		)
 	}
 
+	if result.MatchedCount == 0 {
+		return fmt.Errorf(
+			"outbox event is no longer owned by worker %s",
+			workerID,
+		)
+	}
+
 	return nil
 }
+
 func (r *OutboxRepository) EnsureIndexes(
 	ctx context.Context,
 ) error {
@@ -127,4 +142,75 @@ func (r *OutboxRepository) EnsureIndexes(
 	}
 
 	return nil
+}
+func (r *OutboxRepository) ClaimNext(
+	ctx context.Context,
+	workerID string,
+	leaseDuration time.Duration,
+) (*notification.OutboxEvent, error) {
+	now := time.Now().UTC()
+
+	claimedUntil := now.Add(
+		leaseDuration,
+	)
+
+	filter := bson.M{
+		"published_at": nil,
+
+		"$or": bson.A{
+			bson.M{
+				"claimed_until": nil,
+			},
+			bson.M{
+				"claimed_until": bson.M{
+					"$lte": now,
+				},
+			},
+		},
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"claimed_by":    workerID,
+			"claimed_until": claimedUntil,
+		},
+	}
+
+	opts := options.FindOneAndUpdate().
+		SetSort(
+			bson.D{
+				{
+					Key:   "created_at",
+					Value: 1,
+				},
+			},
+		).
+		SetReturnDocument(
+			options.After,
+		)
+
+	var event notification.OutboxEvent
+
+	err := r.collection.FindOneAndUpdate(
+		ctx,
+		filter,
+		update,
+		opts,
+	).Decode(&event)
+
+	if errors.Is(
+		err,
+		mongo.ErrNoDocuments,
+	) {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf(
+			"claim next outbox event: %w",
+			err,
+		)
+	}
+
+	return &event, nil
 }
