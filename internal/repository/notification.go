@@ -2,10 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"time"
-
 	"notification-service/internal/notification"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -26,15 +26,22 @@ func NewNotificationRepository(
 	}
 }
 
+var errAlreadyProcessed = errors.New("notification event already processed")
+
 func (r *NotificationRepository) CreateWithOutbox(
 	ctx context.Context,
 	n notification.Notification,
 	outbox notification.OutboxEvent,
 ) (notification.Notification, error) {
-	session, err := r.database.Client().StartSession()
+	session, err :=
+		r.database.Client().StartSession()
+
 	if err != nil {
 		return notification.Notification{},
-			fmt.Errorf("start mongo session: %w", err)
+			fmt.Errorf(
+				"start mongo session: %w",
+				err,
+			)
 	}
 
 	defer session.EndSession(ctx)
@@ -44,26 +51,21 @@ func (r *NotificationRepository) CreateWithOutbox(
 		func(
 			txCtx context.Context,
 		) (any, error) {
-			result, err := r.collection.InsertOne(
+			_, err := r.collection.InsertOne(
 				txCtx,
 				n,
 			)
 
 			if err != nil {
+				if mongo.IsDuplicateKeyError(err) {
+					return nil, errAlreadyProcessed
+				}
+
 				return nil, fmt.Errorf(
 					"insert notification: %w",
 					err,
 				)
 			}
-
-			id, ok := result.InsertedID.(bson.ObjectID)
-			if !ok {
-				return nil, fmt.Errorf(
-					"unexpected notification id type",
-				)
-			}
-
-			n.ID = id
 
 			outboxCollection :=
 				r.database.Collection(
@@ -86,6 +88,13 @@ func (r *NotificationRepository) CreateWithOutbox(
 		},
 	)
 
+	if errors.Is(
+		err,
+		errAlreadyProcessed,
+	) {
+		return n, nil
+	}
+
 	if err != nil {
 		return notification.Notification{},
 			fmt.Errorf(
@@ -102,14 +111,14 @@ func (r *NotificationRepository) EnsureIndexes(
 	indexes := []mongo.IndexModel{
 		{
 			Keys: bson.D{
-				{Key: "workspace_id", Value: 1},
+				{Key: "app_id", Value: 1},
 				{Key: "recipient_id", Value: 1},
 				{Key: "created_at", Value: -1},
 			},
 		},
 		{
 			Keys: bson.D{
-				{Key: "workspace_id", Value: 1},
+				{Key: "app_id", Value: 1},
 				{Key: "recipient_id", Value: 1},
 				{Key: "read_at", Value: 1},
 			},
@@ -141,12 +150,12 @@ func (r *NotificationRepository) EnsureIndexes(
 
 func (r *NotificationRepository) ListByRecipient(
 	ctx context.Context,
-	workspaceID string,
+	appID string,
 	recipientID string,
 	limit int64,
 ) ([]notification.Notification, error) {
 	filter := bson.M{
-		"workspace_id": workspaceID,
+		"app_id":       appID,
 		"recipient_id": recipientID,
 	}
 
@@ -173,7 +182,7 @@ func (r *NotificationRepository) ListByRecipient(
 
 func (r *NotificationRepository) MarkAsRead(
 	ctx context.Context,
-	workspaceID string,
+	appID string,
 	recipientID string,
 	notificationID string,
 ) error {
@@ -184,7 +193,7 @@ func (r *NotificationRepository) MarkAsRead(
 
 	filter := bson.M{
 		"_id":          id,
-		"workspace_id": workspaceID,
+		"app_id":       appID,
 		"recipient_id": recipientID,
 	}
 
@@ -208,11 +217,11 @@ func (r *NotificationRepository) MarkAsRead(
 
 func (r *NotificationRepository) UnreadCount(
 	ctx context.Context,
-	workspaceID string,
+	appID string,
 	recipientID string,
 ) (int64, error) {
 	filter := bson.M{
-		"workspace_id": workspaceID,
+		"app_id":       appID,
 		"recipient_id": recipientID,
 		"read_at":      nil,
 	}
@@ -234,13 +243,13 @@ func (r *NotificationRepository) UnreadCount(
 
 func (r *NotificationRepository) MarkAllAsRead(
 	ctx context.Context,
-	workspaceID string,
+	appID string,
 	recipientID string,
 ) error {
 	now := time.Now().UTC()
 
 	filter := bson.M{
-		"workspace_id": workspaceID,
+		"app_id":       appID,
 		"recipient_id": recipientID,
 		"read_at":      nil,
 	}

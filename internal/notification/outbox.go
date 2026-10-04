@@ -26,7 +26,7 @@ type OutboxEvent struct {
 type CreatedEvent struct {
 	ID string `json:"id"`
 
-	WorkspaceID string `json:"workspace_id"`
+	AppID       string `json:"app_id"`
 	RecipientID string `json:"recipient_id"`
 
 	Type string `json:"type"`

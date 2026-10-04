@@ -7,6 +7,7 @@ type Config struct {
 	MongoURI      string
 	MongoDatabase string
 	NATSURL       string
+	JWTSecret     string
 }
 
 func Load() Config {
@@ -16,7 +17,8 @@ func Load() Config {
 		MongoURI:      getEnv("MONGO_URI", "mongodb://localhost:27017"),
 		MongoDatabase: getEnv("MONGO_DATABASE", "Notification"),
 
-		NATSURL: getEnv("NATS_URL", "nats://localhost:4222"),
+		NATSURL:   getEnv("NATS_URL", "nats://localhost:4222"),
+		JWTSecret: os.Getenv("JWT_SECRET"),
 	}
 }
 

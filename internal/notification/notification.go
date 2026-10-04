@@ -24,7 +24,7 @@ type Action struct {
 type Notification struct {
 	ID bson.ObjectID `bson:"_id,omitempty" json:"id"`
 
-	WorkspaceID string `bson:"workspace_id" json:"workspace_id"`
+	AppID       string `bson:"app_id" json:"app_id"`
 	RecipientID string `bson:"recipient_id" json:"recipient_id"`
 
 	Type string `bson:"type" json:"type"`

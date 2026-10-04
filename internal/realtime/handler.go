@@ -2,6 +2,7 @@ package realtime
 
 import (
 	"net/http"
+	"notification-service/internal/identity"
 
 	"github.com/gorilla/websocket"
 )
@@ -26,23 +27,37 @@ func (h *Handler) ServeWS(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	userID := r.URL.Query().Get("user_id")
+	currentIdentity, ok :=
+		identity.FromContext(
+			r.Context(),
+		)
 
-	if userID == "" {
+	if !ok {
 		http.Error(
 			w,
-			"user_id is required",
-			http.StatusBadRequest,
+			"unauthorized",
+			http.StatusUnauthorized,
 		)
 		return
 	}
 
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err :=
+		upgrader.Upgrade(
+			w,
+			r,
+			nil,
+		)
+
 	if err != nil {
 		return
 	}
 
-	client := NewClient(userID, conn)
+	client :=
+		NewClient(
+			currentIdentity.AppID,
+			currentIdentity.UserID,
+			conn,
+		)
 
 	h.hub.Register(client)
 
@@ -52,7 +67,8 @@ func (h *Handler) ServeWS(
 	}()
 
 	for {
-		if _, _, err := conn.ReadMessage(); err != nil {
+		if _, _, err :=
+			conn.ReadMessage(); err != nil {
 			break
 		}
 	}

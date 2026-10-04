@@ -73,8 +73,9 @@ func (r *OutboxRepository) MarkPublished(
 	now := time.Now().UTC()
 
 	filter := bson.M{
-		"_id":        id,
-		"claimed_by": workerID,
+		"_id":          id,
+		"claimed_by":   workerID,
+		"published_at": nil,
 	}
 
 	update := bson.M{
@@ -87,11 +88,12 @@ func (r *OutboxRepository) MarkPublished(
 		},
 	}
 
-	result, err := r.collection.UpdateOne(
-		ctx,
-		filter,
-		update,
-	)
+	result, err :=
+		r.collection.UpdateOne(
+			ctx,
+			filter,
+			update,
+		)
 
 	if err != nil {
 		return fmt.Errorf(
@@ -116,23 +118,37 @@ func (r *OutboxRepository) EnsureIndexes(
 	indexes := []mongo.IndexModel{
 		{
 			Keys: bson.D{
-				{Key: "published_at", Value: 1},
-				{Key: "created_at", Value: 1},
+				{
+					Key:   "published_at",
+					Value: 1,
+				},
+				{
+					Key:   "claimed_until",
+					Value: 1,
+				},
+				{
+					Key:   "created_at",
+					Value: 1,
+				},
 			},
 		},
 		{
 			Keys: bson.D{
-				{Key: "event_id", Value: 1},
+				{
+					Key:   "event_id",
+					Value: 1,
+				},
 			},
 			Options: options.Index().
 				SetUnique(true),
 		},
 	}
 
-	_, err := r.collection.Indexes().CreateMany(
-		ctx,
-		indexes,
-	)
+	_, err :=
+		r.collection.Indexes().CreateMany(
+			ctx,
+			indexes,
+		)
 
 	if err != nil {
 		return fmt.Errorf(

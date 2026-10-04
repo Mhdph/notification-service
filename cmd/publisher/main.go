@@ -16,8 +16,8 @@ func main() {
 	defer conn.Close()
 
 	event := map[string]any{
-		"event_id":     "evt_test_101",
-		"workspace_id": "workspace_1",
+		"event_id": "evt_test_101",
+		"app_id":   "workspace_1",
 
 		"actor": map[string]any{
 			"id":   "user_10",

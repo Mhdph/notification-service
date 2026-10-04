@@ -13,6 +13,7 @@ import (
 	"notification-service/internal/config"
 	"notification-service/internal/database"
 	"notification-service/internal/httpapi"
+	"notification-service/internal/identity"
 	"notification-service/internal/messaging"
 	"notification-service/internal/notification"
 	"notification-service/internal/realtime"
@@ -24,19 +25,15 @@ import (
 func main() {
 	cfg := config.Load()
 
-	// --------------------------------------------------
-	// Application Context
-	// --------------------------------------------------
+	if cfg.JWTSecret == "" {
+		panic("JWT_SECRET is required")
+	}
 
 	appCtx, appCancel :=
 		context.WithCancel(
 			context.Background(),
 		)
 	defer appCancel()
-
-	// --------------------------------------------------
-	// Startup Context
-	// --------------------------------------------------
 
 	startupCtx, startupCancel :=
 		context.WithTimeout(
@@ -80,7 +77,7 @@ func main() {
 		)
 
 	// --------------------------------------------------
-	// MongoDB Indexes
+	// Indexes
 	// --------------------------------------------------
 
 	if err := notificationRepo.EnsureIndexes(
@@ -111,10 +108,6 @@ func main() {
 	}
 
 	fmt.Println("Connected to NATS")
-
-	// --------------------------------------------------
-	// JetStream
-	// --------------------------------------------------
 
 	js, err :=
 		messaging.JetStream(
@@ -149,17 +142,13 @@ func main() {
 		)
 
 	// --------------------------------------------------
-	// Event Publisher
+	// Outbox
 	// --------------------------------------------------
 
 	eventPublisher :=
 		messaging.NewEventPublisher(
 			natsConn,
 		)
-
-	// --------------------------------------------------
-	// Outbox Worker
-	// --------------------------------------------------
 
 	workerID :=
 		bson.NewObjectID().Hex()
@@ -169,7 +158,7 @@ func main() {
 			outboxRepo,
 			eventPublisher,
 			workerID,
-			1*time.Second,
+			time.Second,
 			30*time.Second,
 			100,
 		)
@@ -184,7 +173,7 @@ func main() {
 	)
 
 	// --------------------------------------------------
-	// Ticket Consumer
+	// Domain Event Consumer
 	// --------------------------------------------------
 
 	ticketConsumer :=
@@ -206,7 +195,7 @@ func main() {
 	)
 
 	// --------------------------------------------------
-	// Realtime Consumer
+	// Realtime Event Consumer
 	// --------------------------------------------------
 
 	realtimeConsumer :=
@@ -241,8 +230,13 @@ func main() {
 			hub,
 		)
 
+	identityMiddleware :=
+		identity.NewMiddleware(
+			cfg.JWTSecret,
+		)
+
 	// --------------------------------------------------
-	// Router
+	// Public Router
 	// --------------------------------------------------
 
 	mux := http.NewServeMux()
@@ -263,29 +257,51 @@ func main() {
 		},
 	)
 
-	mux.HandleFunc(
+	// --------------------------------------------------
+	// Protected Router
+	// --------------------------------------------------
+
+	protectedMux :=
+		http.NewServeMux()
+
+	protectedMux.HandleFunc(
 		"GET /v1/notifications",
 		notificationHandler.List,
 	)
 
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"GET /v1/notifications/unread-count",
 		notificationHandler.UnreadCount,
 	)
 
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"POST /v1/notifications/{id}/read",
 		notificationHandler.MarkAsRead,
 	)
 
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"POST /v1/notifications/read-all",
 		notificationHandler.MarkAllAsRead,
 	)
 
-	mux.HandleFunc(
+	protectedMux.HandleFunc(
 		"GET /ws",
 		realtimeHandler.ServeWS,
+	)
+
+	protectedHandler :=
+		identityMiddleware.Handle(
+			protectedMux,
+		)
+
+	mux.Handle(
+		"/v1/",
+		protectedHandler,
+	)
+
+	mux.Handle(
+		"/ws",
+		protectedHandler,
 	)
 
 	// --------------------------------------------------
@@ -316,7 +332,7 @@ func main() {
 	}()
 
 	// --------------------------------------------------
-	// Shutdown Signal
+	// Shutdown
 	// --------------------------------------------------
 
 	shutdownSignal := make(
@@ -336,27 +352,14 @@ func main() {
 		"Shutting down Notification Service...",
 	)
 
-	// --------------------------------------------------
-	// Stop Background Workers
-	// --------------------------------------------------
-
 	appCancel()
-
-	// --------------------------------------------------
-	// Shutdown Context
-	// --------------------------------------------------
 
 	shutdownCtx, shutdownCancel :=
 		context.WithTimeout(
 			context.Background(),
 			5*time.Second,
 		)
-
 	defer shutdownCancel()
-
-	// --------------------------------------------------
-	// Stop HTTP Server
-	// --------------------------------------------------
 
 	if err := server.Shutdown(
 		shutdownCtx,
@@ -367,20 +370,12 @@ func main() {
 		)
 	}
 
-	// --------------------------------------------------
-	// Stop Ticket Consumer
-	// --------------------------------------------------
-
 	if err := ticketSubscription.Unsubscribe(); err != nil {
 		fmt.Printf(
 			"Ticket subscription shutdown error: %v\n",
 			err,
 		)
 	}
-
-	// --------------------------------------------------
-	// Stop Realtime Consumer
-	// --------------------------------------------------
 
 	if err := realtimeSubscription.Unsubscribe(); err != nil {
 		fmt.Printf(
@@ -389,20 +384,12 @@ func main() {
 		)
 	}
 
-	// --------------------------------------------------
-	// Drain NATS
-	// --------------------------------------------------
-
 	if err := natsConn.Drain(); err != nil {
 		fmt.Printf(
 			"NATS drain error: %v\n",
 			err,
 		)
 	}
-
-	// --------------------------------------------------
-	// Disconnect MongoDB
-	// --------------------------------------------------
 
 	if err := mongoClient.Disconnect(
 		shutdownCtx,

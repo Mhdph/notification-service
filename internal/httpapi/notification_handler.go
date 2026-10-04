@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"notification-service/internal/identity"
 	"notification-service/internal/notification"
 )
 
@@ -25,56 +26,79 @@ func (h *NotificationHandler) List(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	workspaceID := r.URL.Query().Get("workspace_id")
-	recipientID := r.URL.Query().Get("recipient_id")
+	requestIdentity, ok :=
+		identity.FromContext(
+			r.Context(),
+		)
 
-	if workspaceID == "" || recipientID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "workspace_id and recipient_id are required",
-		})
+	if !ok {
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "request identity not found",
+			},
+		)
 		return
 	}
 
 	limit := int64(30)
 
 	if value := r.URL.Query().Get("limit"); value != "" {
-		parsed, err := strconv.ParseInt(value, 10, 64)
+		parsed, err := strconv.ParseInt(
+			value,
+			10,
+			64,
+		)
+
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "invalid limit",
-			})
+			writeJSON(
+				w,
+				http.StatusBadRequest,
+				map[string]string{
+					"error": "invalid limit",
+				},
+			)
 			return
 		}
 
 		limit = parsed
 	}
 
-	notifications, err := h.service.List(
-		r.Context(),
-		workspaceID,
-		recipientID,
-		limit,
-	)
+	notifications, err :=
+		h.service.List(
+			r.Context(),
+			requestIdentity.AppID,
+			requestIdentity.UserID,
+			limit,
+		)
+
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "internal server error",
-		})
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, notifications)
+	writeJSON(
+		w,
+		http.StatusOK,
+		notifications,
+	)
 }
 
 func (h *NotificationHandler) MarkAsRead(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	workspaceID := r.URL.Query().Get("workspace_id")
-	recipientID := r.URL.Query().Get("recipient_id")
-
-	if workspaceID == "" || recipientID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "workspace_id and recipient_id are required",
+	requestIdentity, ok := identity.FromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "request identity not found",
 		})
 		return
 	}
@@ -90,8 +114,8 @@ func (h *NotificationHandler) MarkAsRead(
 
 	err := h.service.MarkAsRead(
 		r.Context(),
-		workspaceID,
-		recipientID,
+		requestIdentity.AppID,
+		requestIdentity.UserID,
 		id,
 	)
 
@@ -128,28 +152,18 @@ func (h *NotificationHandler) UnreadCount(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	workspaceID :=
-		r.URL.Query().Get("workspace_id")
-
-	recipientID :=
-		r.URL.Query().Get("recipient_id")
-
-	if workspaceID == "" || recipientID == "" {
-		writeJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "workspace_id and recipient_id are required",
-			},
-		)
-
+	requestIdentity, ok := identity.FromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "request identity not found",
+		})
 		return
 	}
 
 	count, err := h.service.UnreadCount(
 		r.Context(),
-		workspaceID,
-		recipientID,
+		requestIdentity.AppID,
+		requestIdentity.UserID,
 	)
 
 	if err != nil {
@@ -176,28 +190,18 @@ func (h *NotificationHandler) MarkAllAsRead(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	workspaceID :=
-		r.URL.Query().Get("workspace_id")
-
-	recipientID :=
-		r.URL.Query().Get("recipient_id")
-
-	if workspaceID == "" || recipientID == "" {
-		writeJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "workspace_id and recipient_id are required",
-			},
-		)
-
+	requestIdentity, ok := identity.FromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "request identity not found",
+		})
 		return
 	}
 
 	err := h.service.MarkAllAsRead(
 		r.Context(),
-		workspaceID,
-		recipientID,
+		requestIdentity.AppID,
+		requestIdentity.UserID,
 	)
 
 	if err != nil {

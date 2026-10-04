@@ -5,7 +5,7 @@ import "time"
 type TicketUserMentionedEvent struct {
 	EventID string `json:"event_id"`
 
-	WorkspaceID string `json:"workspace_id"`
+	AppID string `json:"app_id"`
 
 	Actor struct {
 		ID   string `json:"id"`

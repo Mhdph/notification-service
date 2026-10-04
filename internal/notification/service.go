@@ -10,7 +10,7 @@ import (
 )
 
 type CreateInput struct {
-	WorkspaceID string
+	AppID       string
 	RecipientID string
 
 	Type string
@@ -47,7 +47,7 @@ func (s *Service) Create(
 	n := Notification{
 		ID: bson.NewObjectID(),
 
-		WorkspaceID: input.WorkspaceID,
+		AppID:       input.AppID,
 		RecipientID: input.RecipientID,
 
 		Type: input.Type,
@@ -71,7 +71,7 @@ func (s *Service) Create(
 	createdEvent := CreatedEvent{
 		ID: n.ID.Hex(),
 
-		WorkspaceID: n.WorkspaceID,
+		AppID:       n.AppID,
 		RecipientID: n.RecipientID,
 
 		Type: n.Type,
@@ -123,7 +123,7 @@ func (s *Service) Create(
 
 func (s *Service) List(
 	ctx context.Context,
-	workspaceID string,
+	AppID string,
 	recipientID string,
 	limit int64,
 ) ([]Notification, error) {
@@ -137,7 +137,7 @@ func (s *Service) List(
 
 	return s.repository.ListByRecipient(
 		ctx,
-		workspaceID,
+		AppID,
 		recipientID,
 		limit,
 	)
@@ -145,37 +145,37 @@ func (s *Service) List(
 
 func (s *Service) MarkAsRead(
 	ctx context.Context,
-	workspaceID string,
+	AppID string,
 	recipientID string,
 	notificationID string,
 ) error {
 	return s.repository.MarkAsRead(
 		ctx,
-		workspaceID,
+		AppID,
 		recipientID,
 		notificationID,
 	)
 }
 func (s *Service) UnreadCount(
 	ctx context.Context,
-	workspaceID string,
+	AppID string,
 	recipientID string,
 ) (int64, error) {
 	return s.repository.UnreadCount(
 		ctx,
-		workspaceID,
+		AppID,
 		recipientID,
 	)
 }
 
 func (s *Service) MarkAllAsRead(
 	ctx context.Context,
-	workspaceID string,
+	AppID string,
 	recipientID string,
 ) error {
 	return s.repository.MarkAllAsRead(
 		ctx,
-		workspaceID,
+		AppID,
 		recipientID,
 	)
 }

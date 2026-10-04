@@ -91,7 +91,7 @@ func (c *TicketConsumer) handleUserMentioned(
 	err := c.service.Create(
 		ctx,
 		notification.CreateInput{
-			WorkspaceID: event.WorkspaceID,
+			AppID: event.AppID,
 
 			RecipientID: event.Recipient.ID,
 

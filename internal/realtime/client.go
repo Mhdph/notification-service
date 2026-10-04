@@ -7,18 +7,20 @@ import (
 )
 
 type Client struct {
+	AppID  string
 	UserID string
 
 	conn *websocket.Conn
-
-	mu sync.Mutex
+	mu   sync.Mutex
 }
 
 func NewClient(
+	appID string,
 	userID string,
 	conn *websocket.Conn,
 ) *Client {
 	return &Client{
+		AppID:  appID,
 		UserID: userID,
 		conn:   conn,
 	}

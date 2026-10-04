@@ -11,27 +11,27 @@ type Repository interface {
 
 	ListByRecipient(
 		ctx context.Context,
-		workspaceID string,
+		appID string,
 		recipientID string,
 		limit int64,
 	) ([]Notification, error)
 
 	MarkAsRead(
 		ctx context.Context,
-		workspaceID string,
+		appID string,
 		recipientID string,
 		notificationID string,
 	) error
 
 	UnreadCount(
 		ctx context.Context,
-		workspaceID string,
+		appID string,
 		recipientID string,
 	) (int64, error)
 
 	MarkAllAsRead(
 		ctx context.Context,
-		workspaceID string,
+		appID string,
 		recipientID string,
 	) error
 }

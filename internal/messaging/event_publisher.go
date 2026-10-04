@@ -35,5 +35,15 @@ func (p *EventPublisher) Publish(
 		)
 	}
 
+	if err := p.conn.FlushWithContext(
+		ctx,
+	); err != nil {
+		return fmt.Errorf(
+			"flush event to %s: %w",
+			subject,
+			err,
+		)
+	}
+
 	return nil
 }
