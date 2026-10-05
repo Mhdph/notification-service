@@ -92,9 +92,30 @@ func (r *NotificationRepository) CreateWithOutbox(
 		err,
 		errAlreadyProcessed,
 	) {
-		return n, nil
-	}
+		var existing notification.Notification
 
+		findErr :=
+			r.collection.FindOne(
+				ctx,
+				bson.M{
+					"source_event_id": n.SourceEventID,
+
+					"recipient_id": n.RecipientID,
+				},
+			).Decode(
+				&existing,
+			)
+
+		if findErr != nil {
+			return notification.Notification{},
+				fmt.Errorf(
+					"find existing notification after duplicate: %w",
+					findErr,
+				)
+		}
+
+		return existing, nil
+	}
 	if err != nil {
 		return notification.Notification{},
 			fmt.Errorf(

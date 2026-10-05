@@ -41,13 +41,14 @@ func NewService(
 func (s *Service) Create(
 	ctx context.Context,
 	input CreateInput,
-) error {
+) (Notification, error) {
 	now := time.Now().UTC()
 
 	n := Notification{
 		ID: bson.NewObjectID(),
 
-		AppID:       input.AppID,
+		AppID: input.AppID,
+
 		RecipientID: input.RecipientID,
 
 		Type: input.Type,
@@ -57,7 +58,8 @@ func (s *Service) Create(
 		Resource: input.Resource,
 
 		Title: input.Title,
-		Body:  input.Body,
+
+		Body: input.Body,
 
 		Action: input.Action,
 
@@ -71,7 +73,8 @@ func (s *Service) Create(
 	createdEvent := CreatedEvent{
 		ID: n.ID.Hex(),
 
-		AppID:       n.AppID,
+		AppID: n.AppID,
+
 		RecipientID: n.RecipientID,
 
 		Type: n.Type,
@@ -81,7 +84,8 @@ func (s *Service) Create(
 		Resource: n.Resource,
 
 		Title: n.Title,
-		Body:  n.Body,
+
+		Body: n.Body,
 
 		Action: n.Action,
 
@@ -90,12 +94,17 @@ func (s *Service) Create(
 		CreatedAt: n.CreatedAt,
 	}
 
-	payload, err := json.Marshal(createdEvent)
-	if err != nil {
-		return fmt.Errorf(
-			"marshal notification created event: %w",
-			err,
+	payload, err :=
+		json.Marshal(
+			createdEvent,
 		)
+
+	if err != nil {
+		return Notification{},
+			fmt.Errorf(
+				"marshal notification created event: %w",
+				err,
+			)
 	}
 
 	outbox := OutboxEvent{
@@ -112,15 +121,23 @@ func (s *Service) Create(
 		PublishedAt: nil,
 	}
 
-	_, err = s.repository.CreateWithOutbox(
-		ctx,
-		n,
-		outbox,
-	)
+	createdNotification, err :=
+		s.repository.CreateWithOutbox(
+			ctx,
+			n,
+			outbox,
+		)
 
-	return err
+	if err != nil {
+		return Notification{},
+			fmt.Errorf(
+				"create notification: %w",
+				err,
+			)
+	}
+
+	return createdNotification, nil
 }
-
 func (s *Service) List(
 	ctx context.Context,
 	AppID string,

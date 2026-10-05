@@ -58,9 +58,10 @@ func main() {
 
 	fmt.Println("Connected to MongoDB")
 
-	db := mongoClient.Database(
-		cfg.MongoDatabase,
-	)
+	db :=
+		mongoClient.Database(
+			cfg.MongoDatabase,
+		)
 
 	// --------------------------------------------------
 	// Repositories
@@ -76,19 +77,17 @@ func main() {
 			db,
 		)
 
-	// --------------------------------------------------
-	// Indexes
-	// --------------------------------------------------
-
-	if err := notificationRepo.EnsureIndexes(
-		startupCtx,
-	); err != nil {
+	if err :=
+		notificationRepo.EnsureIndexes(
+			startupCtx,
+		); err != nil {
 		panic(err)
 	}
 
-	if err := outboxRepo.EnsureIndexes(
-		startupCtx,
-	); err != nil {
+	if err :=
+		outboxRepo.EnsureIndexes(
+			startupCtx,
+		); err != nil {
 		panic(err)
 	}
 
@@ -118,22 +117,24 @@ func main() {
 		panic(err)
 	}
 
-	if err := messaging.EnsureTicketStream(
-		js,
-	); err != nil {
+	if err :=
+		messaging.EnsureTicketStream(
+			js,
+		); err != nil {
 		panic(err)
 	}
 
 	fmt.Println("JetStream ready")
 
 	// --------------------------------------------------
-	// Realtime Hub
+	// Realtime
 	// --------------------------------------------------
 
-	hub := realtime.NewHub()
+	hub :=
+		realtime.NewHub()
 
 	// --------------------------------------------------
-	// Notification Service
+	// Application Service
 	// --------------------------------------------------
 
 	notificationService :=
@@ -173,7 +174,7 @@ func main() {
 	)
 
 	// --------------------------------------------------
-	// Domain Event Consumer
+	// Ticket Consumer
 	// --------------------------------------------------
 
 	ticketConsumer :=
@@ -195,7 +196,7 @@ func main() {
 	)
 
 	// --------------------------------------------------
-	// Realtime Event Consumer
+	// Realtime Consumer
 	// --------------------------------------------------
 
 	realtimeConsumer :=
@@ -217,7 +218,7 @@ func main() {
 	)
 
 	// --------------------------------------------------
-	// HTTP Handlers
+	// HTTP
 	// --------------------------------------------------
 
 	notificationHandler :=
@@ -235,11 +236,10 @@ func main() {
 			cfg.JWTSecret,
 		)
 
-	// --------------------------------------------------
-	// Public Router
-	// --------------------------------------------------
+	mux :=
+		http.NewServeMux()
 
-	mux := http.NewServeMux()
+	// Public
 
 	mux.HandleFunc(
 		"GET /health",
@@ -251,18 +251,22 @@ func main() {
 				http.StatusOK,
 			)
 
-			_, _ = w.Write(
-				[]byte("OK"),
-			)
+			_, _ =
+				w.Write(
+					[]byte("OK"),
+				)
 		},
 	)
 
-	// --------------------------------------------------
-	// Protected Router
-	// --------------------------------------------------
+	// Protected
 
 	protectedMux :=
 		http.NewServeMux()
+
+	protectedMux.HandleFunc(
+		"POST /v1/notifications",
+		notificationHandler.Create,
+	)
 
 	protectedMux.HandleFunc(
 		"GET /v1/notifications",
@@ -308,13 +312,14 @@ func main() {
 	// HTTP Server
 	// --------------------------------------------------
 
-	server := &http.Server{
-		Addr: ":" + cfg.HTTPPort,
+	server :=
+		&http.Server{
+			Addr: ":" + cfg.HTTPPort,
 
-		Handler: mux,
+			Handler: mux,
 
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+			ReadHeaderTimeout: 5 * time.Second,
+		}
 
 	go func() {
 		fmt.Printf(
@@ -322,7 +327,8 @@ func main() {
 			server.Addr,
 		)
 
-		if err := server.ListenAndServe(); err != nil &&
+		if err :=
+			server.ListenAndServe(); err != nil &&
 			!errors.Is(
 				err,
 				http.ErrServerClosed,
@@ -332,13 +338,14 @@ func main() {
 	}()
 
 	// --------------------------------------------------
-	// Shutdown
+	// Graceful Shutdown
 	// --------------------------------------------------
 
-	shutdownSignal := make(
-		chan os.Signal,
-		1,
-	)
+	shutdownSignal :=
+		make(
+			chan os.Signal,
+			1,
+		)
 
 	signal.Notify(
 		shutdownSignal,
@@ -361,39 +368,44 @@ func main() {
 		)
 	defer shutdownCancel()
 
-	if err := server.Shutdown(
-		shutdownCtx,
-	); err != nil {
+	if err :=
+		server.Shutdown(
+			shutdownCtx,
+		); err != nil {
 		fmt.Printf(
 			"HTTP server shutdown error: %v\n",
 			err,
 		)
 	}
 
-	if err := ticketSubscription.Unsubscribe(); err != nil {
+	if err :=
+		ticketSubscription.Unsubscribe(); err != nil {
 		fmt.Printf(
 			"Ticket subscription shutdown error: %v\n",
 			err,
 		)
 	}
 
-	if err := realtimeSubscription.Unsubscribe(); err != nil {
+	if err :=
+		realtimeSubscription.Unsubscribe(); err != nil {
 		fmt.Printf(
 			"Realtime subscription shutdown error: %v\n",
 			err,
 		)
 	}
 
-	if err := natsConn.Drain(); err != nil {
+	if err :=
+		natsConn.Drain(); err != nil {
 		fmt.Printf(
 			"NATS drain error: %v\n",
 			err,
 		)
 	}
 
-	if err := mongoClient.Disconnect(
-		shutdownCtx,
-	); err != nil {
+	if err :=
+		mongoClient.Disconnect(
+			shutdownCtx,
+		); err != nil {
 		fmt.Printf(
 			"MongoDB shutdown error: %v\n",
 			err,

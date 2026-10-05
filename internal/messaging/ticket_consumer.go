@@ -88,7 +88,7 @@ func (c *TicketConsumer) handleUserMentioned(
 	)
 	defer cancel()
 
-	err := c.service.Create(
+	_, err := c.service.Create(
 		ctx,
 		notification.CreateInput{
 			AppID: event.AppID,
@@ -98,13 +98,15 @@ func (c *TicketConsumer) handleUserMentioned(
 			Type: "ticket.mention",
 
 			Actor: notification.Actor{
-				ID:   event.Actor.ID,
+				ID: event.Actor.ID,
+
 				Name: event.Actor.Name,
 			},
 
 			Resource: notification.Resource{
 				Type: "ticket",
-				ID:   event.Ticket.ID,
+
+				ID: event.Ticket.ID,
 			},
 
 			Title: "You were mentioned",
@@ -128,7 +130,6 @@ func (c *TicketConsumer) handleUserMentioned(
 			SourceEventID: event.EventID,
 		},
 	)
-
 	if err != nil {
 		fmt.Printf(
 			"create notification from ticket mention: %v\n",
