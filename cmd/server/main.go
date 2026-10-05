@@ -316,7 +316,7 @@ func main() {
 		&http.Server{
 			Addr: ":" + cfg.HTTPPort,
 
-			Handler: mux,
+			Handler: httpapi.CORS(mux),
 
 			ReadHeaderTimeout: 5 * time.Second,
 		}
